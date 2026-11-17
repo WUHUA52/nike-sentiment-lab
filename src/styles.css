@@ -1067,3 +1067,12 @@ a:hover {
     transition: none !important;
   }
 }
+
+/* Link-only mode: the button stays focusable while the text is fetched */
+
+.button--primary[aria-disabled='true'] {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ash);
+  cursor: progress;
+}

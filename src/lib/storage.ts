@@ -16,7 +16,8 @@ function isSavedPost(value: unknown): value is SavedPost {
     isSentiment(post.predicted) &&
     (post.corrected === null || isSentiment(post.corrected)) &&
     typeof post.needsReview === 'boolean' &&
-    typeof post.fictional === 'boolean'
+    typeof post.fictional === 'boolean' &&
+    (post.fetched === undefined || typeof post.fetched === 'boolean')
   )
 }
 

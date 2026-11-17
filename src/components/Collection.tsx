@@ -106,6 +106,7 @@ export function Collection({ posts, titleRef, hasDraft, onRelabel, onRemove, onE
                     )}
                     {post.needsReview && <li className="saved__flag">Needs human review</li>}
                     {post.fictional && <li>Fictional example</li>}
+                    {post.fetched && <li>Text fetched from link</li>}
                     {post.sourceLink && (
                       <li>
                         <a href={post.sourceLink} target="_blank" rel="noopener noreferrer">

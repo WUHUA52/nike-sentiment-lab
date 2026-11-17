@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FICTIONAL_EXAMPLES } from '../data/examples.ts'
 import { analyze } from './classifier.ts'
 import { csvCell, toCsv } from './csv.ts'
+import { embedRequestUrl, fetchPostText, isPostLink, textFromEmbedHtml } from './fetchPost.ts'
 import { normalizeSourceLink } from './storage.ts'
 import type { SavedPost } from './types.ts'
 
@@ -146,5 +147,52 @@ describe('normalizeSourceLink', () => {
     expect(normalizeSourceLink('http://x.com/someone/status/1')).toBeNull()
     expect(normalizeSourceLink('javascript:alert(1)')).toBeNull()
     expect(normalizeSourceLink('x.com/someone')).toBeNull()
+  })
+})
+
+describe('link-only text fetching', () => {
+  const embedHtml =
+    '<blockquote class="twitter-tweet" data-dnt="true"><p lang="en" dir="ltr">Love the new Dunks &amp; the box.<br>Not a &quot;premium&quot; price though &#39;25 <a href="https://t.co/abc">https://t.co/abc</a></p>&mdash; Someone (@someone) <a href="https://x.com/someone/status/1">May 1, 2025</a></blockquote>\n'
+
+  function respond(status: number, body: unknown): typeof fetch {
+    return (async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })) as typeof fetch
+  }
+
+  it('recognizes links to a single post', () => {
+    expect(isPostLink('https://x.com/someone/status/123')).toBe(true)
+    expect(isPostLink('https://twitter.com/someone/statuses/123?s=20')).toBe(true)
+    expect(isPostLink('https://x.com/someone')).toBe(false)
+    expect(isPostLink('not a link')).toBe(false)
+  })
+
+  it('builds a request to the public embed endpoint with the link encoded', () => {
+    const url = new URL(embedRequestUrl('https://x.com/someone/status/123?s=20&t=a'))
+    expect(url.origin + url.pathname).toBe('https://publish.x.com/oembed')
+    expect(url.searchParams.get('url')).toBe('https://x.com/someone/status/123?s=20&t=a')
+    expect(url.searchParams.get('omit_script')).toBe('true')
+  })
+
+  it('extracts plain text from the embed markup', () => {
+    expect(textFromEmbedHtml(embedHtml)).toBe(
+      'Love the new Dunks & the box.\nNot a "premium" price though \'25 https://t.co/abc',
+    )
+    expect(textFromEmbedHtml('<blockquote>no paragraph</blockquote>')).toBe('')
+  })
+
+  it('returns the text for a public post', async () => {
+    const result = await fetchPostText('https://x.com/someone/status/1', respond(200, { html: embedHtml }))
+    expect(result).toEqual({ ok: true, text: textFromEmbedHtml(embedHtml) })
+  })
+
+  it('reports missing posts, empty posts and network trouble separately', async () => {
+    const link = 'https://x.com/someone/status/1'
+    expect(await fetchPostText(link, respond(404, '<html>'))).toEqual({ ok: false, reason: 'not-found' })
+    expect(await fetchPostText(link, respond(200, { html: '<blockquote><p></p></blockquote>' }))).toEqual({ ok: false, reason: 'empty' })
+    expect(await fetchPostText(link, respond(500, 'oops'))).toEqual({ ok: false, reason: 'network' })
+    expect(await fetchPostText(link, respond(200, 'not json'))).toEqual({ ok: false, reason: 'network' })
+    const offline = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof fetch
+    expect(await fetchPostText(link, offline)).toEqual({ ok: false, reason: 'network' })
   })
 })

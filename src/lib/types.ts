@@ -61,4 +61,6 @@ export interface SavedPost {
   needsReview: boolean
   /** True when the text is one of the built-in fictional examples. */
   fictional: boolean
+  /** True when the text came from X's embed endpoint instead of being pasted. */
+  fetched?: boolean
 }

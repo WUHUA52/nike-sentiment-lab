@@ -8,6 +8,8 @@ export interface Reading {
   text: string
   sourceLink: string
   fictional: boolean
+  /** True when the text was fetched from the link instead of pasted. */
+  fetched: boolean
   analysis: Analysis
   /** The label the user wants saved. Starts as the prediction. */
   label: Sentiment
@@ -29,7 +31,7 @@ export function Readout({ reading, panelRef, onLabelChange, onSave }: ReadoutPro
           No read yet
         </h2>
         <p className="readout__empty-text">
-          Paste a tweet and choose Analyze, or pick a fictional example. The label and the words behind it show up here.
+          Paste a tweet or an X link and choose Analyze, or pick a fictional example. The label and the words behind it show up here.
         </p>
       </section>
     )
@@ -70,6 +72,12 @@ export function Readout({ reading, panelRef, onLabelChange, onSave }: ReadoutPro
 
       {reading.fictional && (
         <p className="readout__fictional">Fictional example, written for this demo. Not a real tweet.</p>
+      )}
+      {reading.fetched && (
+        <p className="readout__fictional">
+          Text fetched from X’s public embed service. Long posts can come back shortened, so check it against the
+          original.
+        </p>
       )}
       <MarkedText text={reading.text} highlights={analysis.highlights} />
       {reading.sourceLink && (

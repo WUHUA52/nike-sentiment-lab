@@ -1,6 +1,8 @@
 # Sentiment Lab
 
-A one-page web app that reads a Nike-related tweet you paste in and labels it positive, negative, neutral or mixed. It shows which words drove the label, explains the result in plain English, and flags posts a person should double-check.
+A one-page web app that reads a Nike-related tweet, pasted in as text or given as a link, and labels it positive, negative, neutral or mixed. It shows which words drove the label, explains the result in plain English, and flags posts a person should double-check.
+
+**Live site: https://wuhua52.github.io/nike-sentiment-lab/**
 
 **This is an independent student portfolio project.** It is not affiliated with, sponsored by or endorsed by Nike, Inc. or X Corp. Product names appear only to describe what the posts are about.
 
@@ -12,6 +14,7 @@ A one-page web app that reads a Nike-related tweet you paste in and labels it po
 ## Features
 
 - Paste a tweet, optionally add its x.com link, and analyze it.
+- Or give only the link. The app fetches the text of a public post for you (see [Link-only mode](#link-only-mode)).
 - A label of positive, negative, neutral or mixed.
 - The words and phrases that counted, marked in the text and listed with their points.
 - A short plain-English explanation of the result.
@@ -46,7 +49,7 @@ The review flag never changes the label. The app shows the points each side scor
 - Oxlint for linting
 - Plain CSS, with self-hosted Big Shoulders Display and Archivo fonts from Fontsource (both under the SIL Open Font License)
 
-There is no backend, database, login, paid service or scraping. The app never opens or reads the X link you enter.
+There is no backend, database, login, paid service or scraping. The only network request the app ever makes is the one described in [Link-only mode](#link-only-mode).
 
 ## Setup
 
@@ -67,10 +70,30 @@ Other commands:
 | --- | --- |
 | `npm run build` | Type-checks and builds the site into `dist/` |
 | `npm run preview` | Serves the built site locally |
-| `npm test` | Runs the unit tests for the classifier, CSV export and link check |
+| `npm test` | Runs the unit tests for the classifier, CSV export, link check and link-only fetching |
 | `npm run lint` | Lints the source |
 
 No environment variables or API keys are needed.
+
+`http://localhost:5173` only works while `npm run dev` is running on your own computer. The live site above is always available.
+
+## Deployment
+
+The site is hosted on GitHub Pages. Every push to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), which lints, tests and builds the app and then publishes the `dist/` folder. Nothing needs to be deployed by hand.
+
+## Link-only mode
+
+Leave the text box empty, enter a link to a single post (`https://x.com/name/status/123…`), and choose Analyze. The app then:
+
+1. Sends the link to X's public oEmbed endpoint, `https://publish.x.com/oembed`. This is the official service websites use to embed a post. It needs no API key or login.
+2. Takes the post text out of the reply as plain text, puts it in the text box so you can read and edit it, and analyzes it.
+
+Things to know:
+
+- It only works for public posts. Deleted, private and age-restricted posts come back as "not found", and the app asks you to paste the text instead.
+- Long posts can come back shortened, and images and videos are not included. The result panel reminds you to check the text against the original.
+- In this mode the link leaves your browser and goes to X. When you paste the text yourself, the link is only stored with the saved post and nothing is sent anywhere.
+- X can change, limit or switch off this endpoint at any time. If that happens, pasting the text still works.
 
 ## CSV export
 
@@ -93,10 +116,11 @@ A cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spre
 - **It cannot detect sarcasm.** It flags a small set of phrases that are often sarcastic. Sarcasm without those phrases goes unflagged.
 - **It has not been evaluated.** The rules were not tested against a labeled dataset, so there is no accuracy figure. Treat every label as a first guess.
 - **English only**, one post at a time. It cannot see threads, images, videos or linked pages.
+- **Link-only mode depends on X.** It needs an internet connection and X's public embed endpoint, works for public posts only, and may return long posts shortened.
 - **Negation is shallow.** A negator only reaches the next three words and stops at punctuation, so longer constructions are missed.
 - **"Neutral" means no list words matched.** It does not prove the author has no opinion.
 - **Saved posts are temporary.** They live in `sessionStorage`, so they stay in one browser tab and are gone when it closes.
-- **Source links are checked for format only.** The app accepts an `https://x.com/` or `https://twitter.com/` address and never checks that the post exists or matches the text.
+- **Source links are not verified against pasted text.** When you paste the text yourself, the app only checks that the link is an `https://x.com/` or `https://twitter.com/` address. It does not check that the post exists or matches the text.
 
 ## Project structure
 
@@ -115,6 +139,7 @@ src/
     lexicon.ts            word lists and sarcasm patterns
     csv.ts                CSV export
     storage.ts            sessionStorage and link check
+    fetchPost.ts          link-only mode: fetch post text from X's embed endpoint
     types.ts              shared types
     classifier.test.ts    unit tests
 ```

@@ -11,6 +11,8 @@ interface EntryFormProps {
   text: string
   link: string
   errors: EntryErrors
+  /** True while the post text is being fetched from a link. */
+  fetching: boolean
   textRef: RefObject<HTMLTextAreaElement | null>
   linkRef: RefObject<HTMLInputElement | null>
   onTextChange: (value: string) => void
@@ -23,6 +25,7 @@ export function EntryForm({
   text,
   link,
   errors,
+  fetching,
   textRef,
   linkRef,
   onTextChange,
@@ -56,6 +59,7 @@ export function EntryForm({
             rows={6}
             value={text}
             placeholder="Paste the text of a Nike-related tweet"
+            readOnly={fetching}
             aria-invalid={errors.text ? true : undefined}
             aria-describedby={errors.text ? 'tweet-text-error tweet-text-hint' : 'tweet-text-hint'}
             onChange={(event) => onTextChange(event.target.value)}
@@ -67,7 +71,7 @@ export function EntryForm({
             </p>
           )}
           <p id="tweet-text-hint" className="field__hint">
-            Ctrl or ⌘ + Enter also runs the analysis.
+            Leave this blank to fetch the text from an X link. Ctrl or ⌘ + Enter also runs the analysis.
           </p>
         </div>
 
@@ -84,6 +88,7 @@ export function EntryForm({
             autoComplete="off"
             value={link}
             placeholder="https://x.com/…"
+            readOnly={fetching}
             aria-invalid={errors.link ? true : undefined}
             aria-describedby={errors.link ? 'tweet-link-error tweet-link-hint' : 'tweet-link-hint'}
             onChange={(event) => onLinkChange(event.target.value)}
@@ -94,12 +99,13 @@ export function EntryForm({
             </p>
           )}
           <p id="tweet-link-hint" className="field__hint">
-            Kept with the saved post for reference. This app never opens or reads the link.
+            On its own, the link is sent to X’s public embed service to fetch the post text. With text pasted
+            above, it is only kept for reference and never opened.
           </p>
         </div>
 
-        <button type="submit" className="button button--primary">
-          Analyze
+        <button type="submit" className="button button--primary" aria-disabled={fetching || undefined}>
+          {fetching ? 'Fetching text…' : 'Analyze'}
         </button>
       </form>
 

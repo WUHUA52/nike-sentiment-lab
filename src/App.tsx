@@ -5,8 +5,16 @@ import { Readout, type Reading } from './components/Readout.tsx'
 import { FICTIONAL_EXAMPLES, type FictionalExample } from './data/examples.ts'
 import { analyze } from './lib/classifier.ts'
 import { downloadCsv } from './lib/csv.ts'
+import { fetchPostText, isPostLink, type FetchFailure } from './lib/fetchPost.ts'
 import { loadCollection, normalizeSourceLink, saveCollection } from './lib/storage.ts'
 import { SENTIMENT_LABEL, type SavedPost, type Sentiment } from './lib/types.ts'
+
+const FETCH_ERRORS: Record<FetchFailure, string> = {
+  'not-found':
+    'X has no public post at this link. It may be deleted, private or mistyped. Check the link, or paste the text instead.',
+  network: 'Could not reach X to get the post text. Check your connection and try again, or paste the text instead.',
+  empty: 'X returned this post with no text, so there is nothing to analyze. Paste the text instead.',
+}
 
 function newId(): string {
   return typeof crypto.randomUUID === 'function'
@@ -21,12 +29,17 @@ export default function App() {
   const [reading, setReading] = useState<Reading | null>(null)
   const [posts, setPosts] = useState<SavedPost[]>(loadCollection)
   const [status, setStatus] = useState('')
+  const [fetching, setFetching] = useState(false)
 
   const textRef = useRef<HTMLTextAreaElement>(null)
   const linkRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const collectionTitleRef = useRef<HTMLHeadingElement>(null)
   const runCount = useRef(0)
+  /** Bumped on reset so a slow fetch cannot fill the form after it was cleared. */
+  const fetchToken = useRef(0)
+  /** The last text that came from a link, so re-running it keeps the "fetched" note. */
+  const lastFetched = useRef<{ text: string; link: string } | null>(null)
 
   useEffect(() => {
     saveCollection(posts)
@@ -45,14 +58,14 @@ export default function App() {
     }
   }, [run])
 
-  function runAnalysis(rawText: string, rawLink: string) {
+  function runAnalysis(rawText: string, rawLink: string, fetched = false) {
     const analysis = analyze(rawText)
-    const fictional = FICTIONAL_EXAMPLES.some((example) => example.text === rawText.trim())
+    const fictional = !fetched && FICTIONAL_EXAMPLES.some((example) => example.text === rawText.trim())
     // A fictional example never gets a source link, whatever is in the field.
     const sourceLink = fictional ? '' : normalizeSourceLink(rawLink)
 
     const nextErrors: EntryErrors = {}
-    if (!analysis) nextErrors.text = 'Paste or type a tweet first. There is nothing to analyze yet.'
+    if (!analysis) nextErrors.text = 'Paste a tweet, or add an X link below to fetch its text.'
     if (sourceLink === null) {
       nextErrors.link = 'Use a link that starts with https://x.com/ or https://twitter.com/, or leave this blank.'
     }
@@ -74,6 +87,7 @@ export default function App() {
       text: rawText.trim(),
       sourceLink,
       fictional,
+      fetched,
       analysis,
       label: analysis.sentiment,
       saved: false,
@@ -83,7 +97,42 @@ export default function App() {
     )
   }
 
+  /** Analyze pasted text, or fetch the text first when only a link was given. */
+  async function handleAnalyze() {
+    if (fetching) return
+    const sourceLink = normalizeSourceLink(link)
+    if (text.trim() !== '' || !sourceLink) {
+      const last = lastFetched.current
+      runAnalysis(text, link, last !== null && last.text === text.trim() && last.link === sourceLink)
+      return
+    }
+    if (!isPostLink(sourceLink)) {
+      setErrors({ link: 'To fetch the text, use a link to a single post. It has /status/ and a number in it.' })
+      linkRef.current?.focus()
+      return
+    }
+
+    setErrors({})
+    setFetching(true)
+    setStatus('Fetching the post text from X.')
+    const token = fetchToken.current
+    const result = await fetchPostText(sourceLink)
+    if (token !== fetchToken.current) return
+    setFetching(false)
+
+    if (!result.ok) {
+      setErrors({ link: FETCH_ERRORS[result.reason] })
+      setStatus('')
+      linkRef.current?.focus()
+      return
+    }
+    lastFetched.current = { text: result.text, link: sourceLink }
+    setText(result.text)
+    runAnalysis(result.text, link, true)
+  }
+
   function handlePickExample(example: FictionalExample) {
+    if (fetching) return
     setText(example.text)
     setLink('')
     runAnalysis(example.text, '')
@@ -100,6 +149,7 @@ export default function App() {
       corrected: reading.label === predicted ? null : reading.label,
       needsReview: reading.analysis.reviewReasons.length > 0,
       fictional: reading.fictional,
+      fetched: reading.fetched,
     }
     setPosts((current) => [post, ...current])
     setReading({ ...reading, saved: true })
@@ -125,6 +175,8 @@ export default function App() {
   }
 
   function handleReset() {
+    fetchToken.current += 1
+    setFetching(false)
     setPosts([])
     setText('')
     setLink('')
@@ -149,8 +201,8 @@ export default function App() {
           </h1>
           <div className="hero__row">
             <p className="hero__lede">
-              Paste a Nike-related tweet and see how a short set of rules reads it, with every word that tipped the
-              call marked in place.
+              Paste a Nike-related tweet, or just its link, and see how a short set of rules reads it, with every word
+              that tipped the call marked in place.
             </p>
             <div className="hero__demo">
               <p className="demo-tag">Rule-based demo</p>
@@ -164,6 +216,7 @@ export default function App() {
             text={text}
             link={link}
             errors={errors}
+            fetching={fetching}
             textRef={textRef}
             linkRef={linkRef}
             onTextChange={(value) => {
@@ -174,7 +227,7 @@ export default function App() {
               setLink(value)
               if (errors.link) setErrors((current) => ({ ...current, link: undefined }))
             }}
-            onAnalyze={() => runAnalysis(text, link)}
+            onAnalyze={() => void handleAnalyze()}
             onPickExample={handlePickExample}
           />
           <Readout
